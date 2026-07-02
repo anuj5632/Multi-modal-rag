@@ -20,7 +20,7 @@ def create_chunks(pages):
                 {
                     "page" : page_number,
                     "chunk_index" : index + 1,
-                    "chunk_text" : chunk
+                    "text" : chunk
                 }
             )
 

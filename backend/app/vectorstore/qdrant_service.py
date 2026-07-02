@@ -1,6 +1,9 @@
+import uuid
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from qdrant_client.models import PointStruct
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 COLLECTION_NAME = "documents"
 
@@ -23,18 +26,16 @@ def create_collection():
     
     client.create_collection(
         collection_name = COLLECTION_NAME,
-        vectors_config = {
-            "embedding" : VectorParams(
-                size = 384,
-                distance = Distance.COSINE
-            )
-        }
+        vectors_config = VectorParams(
+            size = 384,
+            distance = Distance.COSINE
+        )
     )
 
     print("Collection created successfully")
 
 
-def insert_chunks(chunks,embedder):
+def insert_chunks(chunks,embedder, document_id, document_name):
     points = []
 
     for index, chunk in enumerate(chunks):
@@ -44,9 +45,11 @@ def insert_chunks(chunks,embedder):
 
         points.append(
             PointStruct(
-                id = index,
+                id = str(uuid.uuid4()),
                 vector = embedding,
                 payload = {
+                    "document_id": document_id,
+                    "document_name": document_name,
                     "page" : chunk["page"],
 
                     "chunk_index":
@@ -68,13 +71,31 @@ def insert_chunks(chunks,embedder):
 
 
 def search_chunks(query_embedding,top_k = 5):
-    results = client.search(
-        collection_name = COLLECTION_NAME,
+    if hasattr(client, "search"):
+        return client.search(
+            collection_name = COLLECTION_NAME,
+            query_vector = query_embedding,
+            limit = top_k
+        )
 
-        query_vector = query_embedding,
-
-        limit = top_k
+    query_result = client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_embedding,
+        limit=top_k,
     )
+    return query_result.points
 
-    return results
+
+def delete_document_chunks(document_id):
+    client.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=Filter(
+            must=[
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(value=document_id),
+                )
+            ]
+        ),
+    )
     

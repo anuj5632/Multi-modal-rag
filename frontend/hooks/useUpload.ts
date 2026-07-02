@@ -3,9 +3,31 @@ import { useUpload as useUploadStore } from '@/lib/store'
 import { api } from '@/lib/api'
 import { SUPPORTED_FORMATS, MAX_FILE_SIZE } from '@/lib/constants'
 
+let documentsLoaded = false
+
 export function useUpload() {
   const store = useUploadStore()
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  const loadDocuments = useCallback(async (force = false) => {
+    if (documentsLoaded && !force) return
+
+    try {
+      const docs = await api.getDocuments()
+      store.setDocuments(docs)
+      documentsLoaded = true
+    } catch (error) {
+      const isCanceled =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === 'ERR_CANCELED'
+
+      if (isCanceled) return
+
+      console.error('[v0] Failed to load documents:', error)
+    }
+  }, [store])
 
   const validateFile = (file: File): string | null => {
     const extension = file.name.split('.').pop()?.toLowerCase() || ''
@@ -37,16 +59,13 @@ export function useUpload() {
       try {
         const response = await api.uploadDocument(file)
 
-        // Add document to store
-        store.addDocument({
-          id: Date.now().toString(),
-          filename: file.name,
-          pages: response.pages,
-          chunks: response.chunks,
-          images: response.images,
-          upload_time: new Date().toISOString(),
-          status: 'indexed',
-        })
+        // Prefer backend document metadata so delete/list stays in sync.
+        if (response.document) {
+          store.addDocument(response.document)
+          documentsLoaded = true
+        } else {
+          await loadDocuments()
+        }
 
         return true
       } catch (error) {
@@ -61,7 +80,7 @@ export function useUpload() {
         store.setUploadProgress(0)
       }
     },
-    [store],
+    [loadDocuments, store],
   )
 
   const removeDocument = useCallback(
@@ -91,6 +110,12 @@ export function useUpload() {
       window.removeEventListener('upload-progress', handleProgress)
     }
   }, [store])
+
+  useEffect(() => {
+    if (store.documents.length === 0) {
+      void loadDocuments()
+    }
+  }, [loadDocuments, store.documents.length])
 
   return {
     documents: store.documents,

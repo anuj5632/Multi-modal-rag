@@ -16,6 +16,7 @@ qdrant-client
 openai
 
 python-dotenv
+google-genai
 
 pillow
 langchain-text-splitters

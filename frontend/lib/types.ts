@@ -18,6 +18,7 @@ export interface UploadResponse {
   pages: number
   chunks: number
   images: number
+  document?: Document
 }
 
 export interface Source {
