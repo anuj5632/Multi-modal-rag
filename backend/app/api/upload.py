@@ -13,10 +13,14 @@ from app.ingestion.pdf_loader import extract_text_from_pdf
 from app.ingestion.chunker import create_chunks
 from app.ingestion.image_extractor import extract_images
 from app.embeddings.text_embedding import embedder
+from app.embeddings.image_embedding import image_embedder
 from app.vectorstore.qdrant_service import(
 create_collection,
+create_image_collection,
 insert_chunks,
+insert_images,
 delete_document_chunks,
+delete_document_images,
 )
 
 router = APIRouter(
@@ -56,6 +60,7 @@ def delete_document(document_id: str):
         raise HTTPException(status_code=404, detail="Document not found")
 
     delete_document_chunks(document_id)
+    delete_document_images(document_id)
 
     file_path = target.get("file_path")
     if file_path and os.path.exists(file_path):
@@ -84,18 +89,26 @@ async def upload_documents(file: UploadFile = File(...)):
             file.file,
             buffer
         )
-    
+
     pages = extract_text_from_pdf(file_path)
 
     chunks = create_chunks(pages)
 
-    images = extract_images(file_path)
+    images = extract_images(file_path, document_id=document_id)
 
     create_collection()
+    create_image_collection()
 
     insert_chunks(
         chunks,
         embedder,
+        document_id,
+        file.filename,
+    )
+
+    insert_images(
+        images,
+        image_embedder,
         document_id,
         file.filename,
     )

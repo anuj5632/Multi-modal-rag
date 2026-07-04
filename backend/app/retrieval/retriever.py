@@ -1,5 +1,6 @@
 from app.embeddings.text_embedding import embedder
-from app.vectorstore.qdrant_service import search_chunks
+from app.embeddings.image_embedding import image_embedder
+from app.vectorstore.qdrant_service import search_chunks, search_images
 
 def retrieve_context(question, top_k=5):
 
@@ -23,3 +24,37 @@ def retrieve_context(question, top_k=5):
         })
     
     return context
+
+def retrieve_images(question, top_k = 3, score_threshold = 0.20):
+    """
+    Uses CLIP to embed the question in the same space as the indexed images,
+    then returns the most visually/semantically relevant ones.
+
+    score_threshold filters out low-confidence matches, since CLIP will
+    always return *something* even when no image is actually relevant.
+    
+    """
+
+    query_vector = image_embedder.embed_text(question)
+
+    try:
+        results = search_images(query_vector,top_k = top_k)
+
+    except Exception:
+        return []
+    
+    images = []
+
+    for result in results:
+        if result.score < score_threshold:
+            continue
+
+        images.append({
+            "score" : result.score,
+            "document_id": result.payload.get("document_id", "unknown"),
+            "document_name": result.payload.get("document_name", "Document"),
+            "page" : result.payload["page"],
+            "image_path" : result.payload["image_path"]
+        })
+
+    return images

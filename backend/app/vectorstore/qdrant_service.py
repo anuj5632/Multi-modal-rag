@@ -6,13 +6,18 @@ from qdrant_client.models import PointStruct
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 COLLECTION_NAME = "documents"
+IMAGE_COLLECTION_NAME = "images"
+
+TEXT_VECTOR_SIZE = 384   # BGE-small
+IMAGE_VECTOR_SIZE = 512  # clip-ViT-B-32
 
 client = QdrantClient(
     host = "localhost",
     port = 6333
 )
 
-def create_collection():
+
+def _ensure_collection(name: str, vector_size: int):
     collections = client.get_collections()
 
     existing = [
@@ -20,22 +25,32 @@ def create_collection():
         for collection in collections.collections
     ]
 
-    if COLLECTION_NAME in existing:
-        print("Collection already existed")
-        return 
-    
+    if name in existing:
+        print(f"Collection '{name}' already existed")
+        return
+
     client.create_collection(
-        collection_name = COLLECTION_NAME,
+        collection_name = name,
         vectors_config = VectorParams(
-            size = 384,
+            size = vector_size,
             distance = Distance.COSINE
         )
     )
 
-    print("Collection created successfully")
+    print(f"Collection '{name}' created successfully")
 
 
-def insert_chunks(chunks,embedder, document_id, document_name):
+def create_collection():
+    """Text chunk collection (BGE, 384-dim). Kept for backwards compatibility."""
+    _ensure_collection(COLLECTION_NAME, TEXT_VECTOR_SIZE)
+
+
+def create_image_collection():
+    """Image collection (CLIP, 512-dim)."""
+    _ensure_collection(IMAGE_COLLECTION_NAME, IMAGE_VECTOR_SIZE)
+
+
+def insert_chunks(chunks, embedder, document_id, document_name):
     points = []
 
     for index, chunk in enumerate(chunks):
@@ -59,7 +74,7 @@ def insert_chunks(chunks,embedder, document_id, document_name):
                 }
             )
         )
-    
+
     client.upsert(
         collection_name = COLLECTION_NAME,
         points = points
@@ -70,7 +85,51 @@ def insert_chunks(chunks,embedder, document_id, document_name):
     )
 
 
-def search_chunks(query_embedding,top_k = 5):
+def insert_images(images, image_embedder, document_id, document_name):
+    """
+    images: list of {"page": int, "image_path": str} from image_extractor.extract_images
+    image_embedder: an ImageEmbedder instance
+    """
+    if not images:
+        return
+
+    points = []
+
+    for image in images:
+        try:
+            embedding = image_embedder.embed_image(image["image_path"])
+        except Exception as e:
+            # A corrupt / unreadable extracted image shouldn't kill the whole upload
+            print(f"Skipping image {image['image_path']}: {e}")
+            continue
+
+        points.append(
+            PointStruct(
+                id = str(uuid.uuid4()),
+                vector = embedding,
+                payload = {
+                    "document_id": document_id,
+                    "document_name": document_name,
+                    "page": image["page"],
+                    "image_path": image["image_path"],
+                }
+            )
+        )
+
+    if not points:
+        return
+
+    client.upsert(
+        collection_name = IMAGE_COLLECTION_NAME,
+        points = points
+    )
+
+    print(
+        f"{len(points)} images inserted successfully"
+    )
+
+
+def search_chunks(query_embedding, top_k = 5):
     if hasattr(client, "search"):
         return client.search(
             collection_name = COLLECTION_NAME,
@@ -80,6 +139,22 @@ def search_chunks(query_embedding,top_k = 5):
 
     query_result = client.query_points(
         collection_name=COLLECTION_NAME,
+        query=query_embedding,
+        limit=top_k,
+    )
+    return query_result.points
+
+
+def search_images(query_embedding, top_k = 3):
+    if hasattr(client, "search"):
+        return client.search(
+            collection_name = IMAGE_COLLECTION_NAME,
+            query_vector = query_embedding,
+            limit = top_k
+        )
+
+    query_result = client.query_points(
+        collection_name=IMAGE_COLLECTION_NAME,
         query=query_embedding,
         limit=top_k,
     )
@@ -98,4 +173,21 @@ def delete_document_chunks(document_id):
             ]
         ),
     )
-    
+
+
+def delete_document_images(document_id):
+    try:
+        client.delete(
+            collection_name=IMAGE_COLLECTION_NAME,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=document_id),
+                    )
+                ]
+            ),
+        )
+    except Exception as e:
+        # Collection may not exist yet if no images have ever been indexed
+        print(f"delete_document_images skipped: {e}")
