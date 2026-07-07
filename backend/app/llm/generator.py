@@ -38,6 +38,18 @@ class RAGGenerator:
             context += "\n"
 
         return context
+    
+    def build_audio_context(self, retrieved_audio):
+        context = ""
+
+        for chunk in retrieved_audio:
+            timestamp = chunk["timestamp"]
+            name = chunk["document_name"]
+            text = chunk["text"]
+
+            context += f"[{name} @ {timestamp}]: {text}"
+        
+        return context
 
     def _image_part(self, image_path):
         """Load an image off disk and wrap it as a Gemini Part for vision input."""
@@ -53,17 +65,21 @@ class RAGGenerator:
     def generate_answer(self, question, retrieved_chunks, retrieved_images=None, temperature=0.1):
         """
         Backwards-compatible entry point. If retrieved_images is provided and
-        non-empty, this now calls Gemini in vision mode so the model can
+        non-empty, this calls Gemini in vision mode so the model can
         actually look at the retrieved figures/diagrams/photos, not just
-        text describing them.
+        text describing them. If retrieved_audio is provided, transcript
+        excerpts with timestamps are folded into the context so answers
+        can cite "at 04:12" the same way they cite "page 7".
         """
 
         if self.client is None:
             return "LLM is not configured. Install google-genai and set GEMINI_API_KEY to enable answer generation."
 
         retrieved_images = retrieved_images or []
+        retrieved_audio = retrieved_audio or []
 
         context = self.build_context(retrieved_chunks)
+        audio_context = self.build.audio_context(retrieved_audio)
 
         image_reference_list = "\n".join(
             f"- Image {i+1}: page {img['page']} (from {img['document_name']})"
@@ -74,40 +90,27 @@ class RAGGenerator:
 
 Rules:
 
-1. Answer ONLY using the provided context and, if given, the attached images.
-2. If the answer is not in the context or images, respond with "I don't know".
-3. Mention page numbers whenever possible.
+1. Answer ONLY using the provided text context, transcript excerpts, and (if given) attached images.
+2. If the answer is not in any of the provided material, respond with "I don't know".
+3. Mention page numbers for document context, and timestamps (mm:ss) for transcript excerpts, whenever possible.
 4. Keep answers concise and factual.
 5. If an attached image is relevant to the answer, explicitly reference it (e.g. "as shown in Image 2 on page 7").
 """
 
+        sections = [rules]
+
+        if context:
+            sections.append(f"Document Context:\n\n{context}")
+
+        if audio_context:
+            sections.append(f"Transcript Excerpts:\n\n{audio_context}")
+
         if retrieved_images:
-            prompt = f"""{rules}
+            sections.append(f"Attached Images (in order):\n{image_reference_list}")
 
-Text Context:
+        sections.append(f"Question:\n{question}\n\nAnswer:")
 
-{context}
-
-Attached Images (in order):
-{image_reference_list}
-
-Question:
-{question}
-
-Answer:
-"""
-        else:
-            prompt = f"""{rules}
-
-Context:
-
-{context}
-
-Question:
-{question}
-
-Answer:
-"""
+        prompt = "\n\n".join(sections)
 
         contents = [prompt]
 
@@ -131,3 +134,4 @@ Answer:
 
 
 generator = RAGGenerator()
+

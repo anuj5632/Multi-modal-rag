@@ -1,15 +1,5 @@
 [
   {
-    "id": "992d942b-a053-45e3-9418-135a3a57a87d",
-    "filename": "JD (CDPC 2027 Batch ).pdf",
-    "pages": 162,
-    "chunks": 283,
-    "images": 105,
-    "upload_time": "2026-07-04T06:45:46.752157+00:00",
-    "status": "indexed",
-    "file_path": "uploads\\992d942b-a053-45e3-9418-135a3a57a87d_JD (CDPC 2027 Batch ).pdf"
-  },
-  {
     "id": "fbca5fbf-07a4-475b-92a1-45dcf238290e",
     "filename": "Software Developer(Fresher-2027 Batch)-12 Months.docx.pdf",
     "pages": 6,
@@ -18,15 +8,5 @@
     "upload_time": "2026-07-04T06:46:36.240912+00:00",
     "status": "indexed",
     "file_path": "uploads\\fbca5fbf-07a4-475b-92a1-45dcf238290e_Software Developer(Fresher-2027 Batch)-12 Months.docx.pdf"
-  },
-  {
-    "id": "0cb2af91-614c-4353-8766-0fda89af2b4e",
-    "filename": "Software Developer(Fresher-2027 Batch)-12 Months.docx.pdf",
-    "pages": 6,
-    "chunks": 11,
-    "images": 16,
-    "upload_time": "2026-07-04T06:47:03.563909+00:00",
-    "status": "indexed",
-    "file_path": "uploads\\0cb2af91-614c-4353-8766-0fda89af2b4e_Software Developer(Fresher-2027 Batch)-12 Months.docx.pdf"
   }
 ]
