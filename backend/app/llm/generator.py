@@ -1,4 +1,3 @@
-import os
 import mimetypes
 
 from dotenv import load_dotenv
@@ -12,11 +11,13 @@ except ImportError:
 
 load_dotenv()
 
+from app.core.config import settings
+
 class RAGGenerator:
 
     def __init__(self):
 
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = settings.gemini_api_key
 
         self.client = None
         if api_key and genai is not None:
@@ -24,7 +25,7 @@ class RAGGenerator:
                 api_key = api_key
             )
 
-        self.model = "gemini-2.5-flash"
+        self.model = settings.gemini_model
 
     def build_context(self,retrieved_chunk):
         context = ""
@@ -38,7 +39,7 @@ class RAGGenerator:
             context += "\n"
 
         return context
-    
+
     def build_audio_context(self, retrieved_audio):
         context = ""
 
@@ -47,8 +48,9 @@ class RAGGenerator:
             name = chunk["document_name"]
             text = chunk["text"]
 
-            context += f"[{name} @ {timestamp}]: {text}"
-        
+            context += f"[{name} @ {timestamp}]: {text}\n"
+            context += "\n"
+
         return context
 
     def _image_part(self, image_path):
@@ -62,7 +64,7 @@ class RAGGenerator:
 
         return types.Part.from_bytes(data=data, mime_type=mime_type)
 
-    def generate_answer(self, question, retrieved_chunks, retrieved_images=None, temperature=0.1):
+    def generate_answer(self, question, retrieved_chunks, retrieved_images=None, retrieved_audio=None, temperature=0.1):
         """
         Backwards-compatible entry point. If retrieved_images is provided and
         non-empty, this calls Gemini in vision mode so the model can
@@ -79,14 +81,14 @@ class RAGGenerator:
         retrieved_audio = retrieved_audio or []
 
         context = self.build_context(retrieved_chunks)
-        audio_context = self.build.audio_context(retrieved_audio)
+        audio_context = self.build_audio_context(retrieved_audio)
 
         image_reference_list = "\n".join(
             f"- Image {i+1}: page {img['page']} (from {img['document_name']})"
             for i, img in enumerate(retrieved_images)
         )
 
-        rules = """You are an enterprise document assistant.
+        rules = """You are an enterprise document and meeting-recording assistant.
 
 Rules:
 
@@ -134,4 +136,3 @@ Rules:
 
 
 generator = RAGGenerator()
-

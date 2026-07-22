@@ -5,6 +5,8 @@ from qdrant_client.models import Distance, VectorParams
 from qdrant_client.models import PointStruct
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
+from app.core.config import settings
+
 COLLECTION_NAME = "documents"
 IMAGE_COLLECTION_NAME = "images"
 AUDIO_COLLECTION_NAME = "audio_chunks"
@@ -16,8 +18,8 @@ IMAGE_VECTOR_SIZE = 512  # clip-ViT-B-32
 AUDIO_VECTOR_SIZE = 384  # BGE-small
 
 client = QdrantClient(
-    host = "localhost",
-    port = 6333
+    host = settings.qdrant_host,
+    port = settings.qdrant_port
 )
 
 
@@ -61,15 +63,18 @@ def create_audio_collection():
 
 def insert_chunks(chunks, embedder, document_id, document_name):
     points = []
+    inserted = []
 
     for index, chunk in enumerate(chunks):
         embedding = embedder.embed(
             chunk["text"]
         )
 
+        point_id = str(uuid.uuid4())
+
         points.append(
             PointStruct(
-                id = str(uuid.uuid4()),
+                id = point_id,
                 vector = embedding,
                 payload = {
                     "document_id": document_id,
@@ -84,6 +89,14 @@ def insert_chunks(chunks, embedder, document_id, document_name):
             )
         )
 
+        inserted.append({
+            "id": point_id,
+            "document_id": document_id,
+            "document_name": document_name,
+            "page": chunk["page"],
+            "text": chunk["text"],
+        })
+
     client.upsert(
         collection_name = COLLECTION_NAME,
         points = points
@@ -92,6 +105,8 @@ def insert_chunks(chunks, embedder, document_id, document_name):
     print(
         f"{len(points)} chunks inserted successfully"
     )
+
+    return inserted
 
 
 def insert_images(images, image_embedder, document_id, document_name):
@@ -225,6 +240,36 @@ def search_audio_chunks(query_embedding, top_k = 5):
         limit=top_k,
     )
     return query_result.points
+
+
+def scroll_all_chunks(batch_size=256):
+    """
+    Yields every point currently stored in the text collection. Used to
+    backfill the BM25 index from chunks that were embedded/inserted
+    before hybrid search existed (v1-v3 uploads).
+    """
+    offset = None
+
+    while True:
+        points, offset = client.scroll(
+            collection_name=COLLECTION_NAME,
+            limit=batch_size,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        for point in points:
+            yield {
+                "id": str(point.id),
+                "document_id": point.payload.get("document_id", "unknown"),
+                "document_name": point.payload.get("document_name", "Document"),
+                "page": point.payload.get("page"),
+                "text": point.payload.get("text", ""),
+            }
+
+        if offset is None:
+            break
 
 
 def delete_document_chunks(document_id):

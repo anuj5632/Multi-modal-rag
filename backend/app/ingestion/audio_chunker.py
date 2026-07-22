@@ -39,6 +39,12 @@ def create_audio_chunks(segments,max_chars = 800,max_duration = 45.0):
             })
 
     
+    def _duration(seg):
+        return seg["end"] - seg["start"]
+    
+    def _max_duration(seg1,seg2):
+        return max(_duration(seg1),_duration(seg2))
+
     for seg in segments:
         if current_start is None:
             current_start = seg["start"]
