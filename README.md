@@ -1,6 +1,6 @@
 #  Multi-Modal RAG Assistant
 
-> Enterprise AI Search Across Documents, Images, Audio & Structured Data
+> Enterprise AI Search Across Documents, Images, Audio & Structured Data.
 
 A production-inspired **Multi-Modal Retrieval-Augmented Generation (RAG)** system that enables users to upload documents and interact with them using natural language. The platform combines semantic search, vector databases, and Large Language Models to deliver grounded responses with source citations.
 
